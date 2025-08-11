@@ -1,222 +1,278 @@
 # AIoT Building Simulator
 
-A comprehensive IoT simulator for hostel/building management with Shelly 1PM Gen 4 device simulation using MQTT protocol.
+A comprehensive simulation system for Shelly 1PM Gen 4 smart switches in a hostel building environment. Features real-time MQTT communication, realistic power consumption patterns, and a simple web interface for device management.
 
-## 🚀 Features
+## 🏗️ Architecture
 
-- **Real-time Device Simulation**: Accurate Shelly 1PM Gen 4 behavior with MQTT
-- **Building Management**: Configure multi-floor buildings with customizable rooms
-- **Interactive Dashboard**: Monitor power consumption, device status, and analytics
-- **Visual Building Layout**: React Flow-based floor plans with device controls
-- **Batch Device Control**: Control multiple devices simultaneously
-- **Real-time Updates**: WebSocket and MQTT integration for live data
-- **Energy Analytics**: Track power consumption patterns and usage history
-- **Responsive UI**: Modern Ant Design interface
-
-## 🛠 Tech Stack
-
-### Backend
-- **Node.js** with Express.js
-- **Aedes** - Embedded MQTT broker
-- **MQTT.js** - MQTT client library
-- **Prisma** - Database ORM with SQLite
-- **Socket.io** - Real-time communication
-
-### Frontend
-- **Next.js 14** with TypeScript
-- **Ant Design** - UI components
-- **React Flow** - Interactive building layouts
-- **Apache ECharts** - Data visualization
-- **Zustand** - State management
-- **Tailwind CSS** - Styling
-
-## 📋 Prerequisites
-
-- Node.js 18+ 
-- npm or yarn
+This system uses **MQTT as a single source of truth** for real-time device data, with a simple HTML frontend and Express.js backend. See [ARCHITECTURE.md](./ARCHITECTURE.md) for detailed technical documentation.
 
 ## 🚀 Quick Start
 
-1. **Install Dependencies**
-   ```bash
-   npm install
-   ```
+### Prerequisites
+- Node.js (v18 or higher)
+- npm or yarn
 
-2. **Setup Database**
-   ```bash
-   npm run db:push
-   npm run db:seed
-   ```
+### Installation
+```bash
+# Clone and install dependencies
+npm install
 
-3. **Start Development**
-   ```bash
-   npm run dev
-   ```
+# Setup database
+npm run db:push
+npm run db:seed
 
-4. **Access the Application**
-   - Frontend: http://localhost:3000
-   - Backend API: http://localhost:3001
-   - MQTT Broker: mqtt://localhost:1883
-   - MQTT WebSocket: ws://localhost:8083
+# Start development server
+npm run server:dev
+```
 
-## 🏗 Architecture
+### Access the Application
+- **Web Interface**: http://localhost:3001
+- **MQTT Broker**: localhost:1883 (TCP) / localhost:8083 (WebSocket)
+- **API**: http://localhost:3001/api
 
-### MQTT Topics Structure
-- `shellies/[device_id]/status` - Device status updates
-- `shellies/[device_id]/command` - Device commands (on/off/toggle)
-- `shellies/[device_id]/telemetry` - Real-time telemetry data
-- `shellies/[device_id]/config` - Device configuration
-- `[device_id]/rpc` - RPC commands (Gen4 format)
+## 🎮 Using the System
+
+### Web Interface Controls
+
+#### Simulation Control
+- **▶️ Start Simulation**: Connects all 23 device simulators to MQTT broker
+- **⏹️ Stop Simulation**: Disconnects all simulators and sets devices offline
+- **🔄 Refresh**: Updates the UI with current device states
+
+#### Device Control
+- **💡 All On**: Turns on all online devices
+- **💡 All Off**: Turns off all online devices
+- **Individual Controls**: Each device card has On/Off/Toggle buttons
+
+#### Real-time Monitoring
+- **Power Consumption**: Live watts display per device
+- **Voltage/Current**: Real-time electrical measurements
+- **Temperature**: Device temperature simulation
+- **Energy Totals**: Accumulated kWh consumption
+
+### API Usage
+
+#### Device Management
+```bash
+# Get all devices
+curl http://localhost:3001/api/devices
+
+# Get specific device
+curl http://localhost:3001/api/devices/{device-id}
+
+# Control device
+curl -X POST http://localhost:3001/api/devices/{device-id}/control \
+  -H "Content-Type: application/json" \
+  -d '{"command": "on"}'
+
+# Batch control
+curl -X POST http://localhost:3001/api/devices/batch/control \
+  -H "Content-Type: application/json" \
+  -d '{"deviceIds": ["id1", "id2"], "command": "off"}'
+```
+
+#### Simulation Control
+```bash
+# Start simulation
+curl -X POST http://localhost:3001/api/simulation/start \
+  -H "Content-Type: application/json" \
+  -d '{"buildingId": "building-uuid"}'
+
+# Stop simulation
+curl -X POST http://localhost:3001/api/simulation/stop \
+  -H "Content-Type: application/json" \
+  -d '{}'
+
+# Get simulation status
+curl http://localhost:3001/api/simulation/status
+```
+
+## 🏠 Building Structure
+
+### Demo Building: University Hostel Block A
+
+#### Ground Floor (6 rooms)
+- Reception - Office equipment (~180-400W)
+- Common Lounge - Lighting + fans (~100-400W)  
+- Kitchen - Appliances (~600-4500W)
+- Laundry Room - Washing machines (~100-600W)
+- Study Room - Lighting + computers (~100-650W)
+- Ground Floor Bathroom - Water heater (~200-1800W)
+
+#### Second Floor (8 rooms)
+- Room 201-205 - Student bedrooms (~60-280W each)
+- Bathroom 2A, 2B - Water heaters (~200-1800W each)
+- Hallway - Emergency lighting (~20-120W)
+
+#### Third Floor (9 rooms)
+- Room 301-306 - Student bedrooms (~60-280W each)
+- Bathroom 3A, 3B - Water heaters (~200-1800W each)
+- Hallway - Emergency lighting (~20-120W)
+
+**Total**: 23 devices across 3 floors
+
+## ⚡ Power Simulation Features
+
+### Realistic Consumption Patterns
+Each device simulates authentic power usage based on room type:
+
+- **Bedrooms**: LED lights, fans, chargers, laptops (35-350W)
+- **Bathrooms**: Water heaters, exhaust fans, lighting (5-2200W)
+- **Kitchen**: Refrigerator, microwave, induction cooktop (80-5500W)
+- **Common Areas**: Lighting, fans, TV, charging stations (45-800W)
+- **Hallways**: Emergency lighting, motion sensors (8-150W)
+
+### Time-Based Usage
+- **Peak Hours** (6-9 AM, 6-11 PM): Full consumption
+- **Off-Peak** (11 PM - 6 AM): 30% reduced usage
+- **Day Hours** (9 AM - 6 PM): 60% usage (some students out)
+
+### Electrical Properties
+- **Voltage**: 225-235V with realistic variations
+- **Current**: Calculated using P=VI with power factor simulation
+- **Temperature**: Correlated with power load + ambient cycles
+- **Energy**: Accurate kWh accumulation over time
+
+## 🛠️ Development
+
+### Project Structure
+```
+├── server/
+│   ├── index.js              # Main Express server
+│   ├── api/                  # REST API routes
+│   │   ├── buildings.js      # Building management
+│   │   ├── devices.js        # Device control (MQTT-based)
+│   │   └── simulation.js     # Simulation control
+│   ├── mqtt/
+│   │   └── broker.js         # Aedes MQTT broker
+│   ├── simulators/
+│   │   └── shelly1pm.js      # Shelly device simulator
+│   └── seed.js               # Database seeder
+├── prisma/
+│   ├── schema.prisma         # Database schema
+│   └── dev.db                # SQLite database
+├── public/
+│   └── index.html            # Simple web interface
+└── ARCHITECTURE.md           # Technical documentation
+```
+
+### Scripts
+- `npm run server:dev` - Development server with auto-reload
+- `npm start` - Production server
+- `npm run db:push` - Apply database schema changes
+- `npm run db:seed` - Seed database with demo data
 
 ### Database Schema
-- **Buildings** → **Floors** → **Rooms** → **Devices**
-- **UsageData** - Historical power consumption data
-
-### API Endpoints
-- `GET/POST /api/buildings` - Building management
-- `GET/POST /api/devices` - Device operations
-- `POST /api/devices/:id/control` - Device control
-- `POST /api/simulation/start` - Start simulation
-- `POST /api/simulation/stop` - Stop simulation
-
-## 🎮 Usage
-
-### 1. Create a Building
-- Go to Settings → Buildings
-- Click "Create Sample Building" for a pre-configured hostel
-- Or create custom buildings with floors and rooms
-
-### 2. Start Simulation
-- Click "Start Simulation" in the header
-- Devices will come online and start generating realistic power data
-- Monitor real-time updates in Dashboard
-
-### 3. Control Devices
-- **Dashboard**: Overview of all devices and power consumption
-- **Building View**: Visual floor plans with device controls
-- **Device Control**: Batch operations and detailed device management
-
-### 4. Monitor Analytics
-- Real-time power consumption charts
-- Energy usage patterns by room type
-- Device status and temperature monitoring
+- **Buildings**: Hostel blocks
+- **Floors**: Building floors
+- **Rooms**: Individual rooms with types
+- **Devices**: Shelly devices assigned to rooms
 
 ## 🔧 Configuration
 
 ### Environment Variables
 ```bash
-DATABASE_URL="file:./dev.db"
-MQTT_BROKER_PORT=1883
-MQTT_WS_PORT=8083
-API_PORT=3001
-NEXT_PUBLIC_API_URL=http://localhost:3001
-NEXT_PUBLIC_MQTT_WS_URL=ws://localhost:8083
+# MQTT Configuration
+MQTT_BROKER_PORT=1883        # MQTT TCP port
+MQTT_WS_PORT=8083            # MQTT WebSocket port
+
+# Server Configuration
+API_PORT=3001                # Express server port
+NODE_ENV=development         # Environment mode
 ```
 
-### Power Consumption Patterns
-Customize in Settings → Simulation:
-- **Bedroom**: 10-150W
-- **Bathroom**: 0-2000W (heating elements)
-- **Kitchen**: 50-3500W (appliances)
-- **Common Room**: 20-500W
-- **Hallway**: 5-60W
+### Customization
 
-## 🌟 Key Features Detail
-
-### Shelly 1PM Gen 4 Simulation
-- Accurate MQTT message format
-- Realistic power consumption patterns
-- Temperature simulation with load correlation
-- Energy accumulation tracking
-- Status reporting (online/offline/error)
-
-### Real-time Updates
-- Live power consumption graphs
-- Instant device status changes
-- WebSocket integration for browser clients
-- MQTT pub/sub for device communication
-
-### Building Visualization
-- Interactive floor plans
-- Drag-and-drop room layout
-- Visual device status indicators
-- Room type-specific icons
-
-### Analytics Dashboard
-- Power consumption trends
-- Device utilization statistics
-- Room type distribution
-- Energy cost calculations
-
-## 🚦 Development
-
-### Available Scripts
-- `npm run dev` - Start development servers
-- `npm run server:dev` - Backend only
-- `npm run client:dev` - Frontend only
-- `npm run build` - Production build
-- `npm run start` - Production server
-- `npm run db:push` - Update database schema
-- `npm run db:seed` - Populate with sample data
-
-### Project Structure
-```
-├── app/                    # Next.js frontend
-│   ├── components/         # React components
-│   ├── store/             # Zustand store
-│   └── globals.css        # Global styles
-├── server/                # Backend
-│   ├── api/               # API routes
-│   ├── mqtt/              # MQTT broker
-│   ├── simulators/        # Device simulators
-│   └── index.js           # Main server
-├── prisma/                # Database schema
-└── public/                # Static assets
+#### Add New Room Types
+Edit `server/simulators/shelly1pm.js`:
+```javascript
+consumptionPatterns: {
+  newRoomType: {
+    min: 50, max: 500, typical: 200, peak: 600
+  }
+}
 ```
 
-## 🐛 Troubleshooting
+#### Modify Time Patterns
+Adjust `timePatterns.getCurrentTimeMultiplier()` in the simulator.
 
-**MQTT Connection Issues**
-- Check if ports 1883 and 8083 are available
-- Verify firewall settings
-- Check browser WebSocket support
+#### Change Building Structure
+Update `server/seed.js` and run `npm run db:seed`.
 
-**Database Issues**
-- Run `npm run db:push` to update schema
-- Delete `prisma/dev.db` and re-seed for fresh start
+## 📊 Monitoring
 
-**Performance Issues**
-- Limit number of simultaneous devices (< 50 for development)
-- Adjust telemetry intervals in simulation settings
+### Health Check
+```bash
+curl http://localhost:3001/api/health
+# Returns: {"status":"ok","mqtt":{"clients":24}}
+```
 
-## 📈 Future Enhancements
+### Real-time MQTT Messages
+Monitor the console output for live MQTT message logging:
+```
+Message from shelly1pmg4-abc123 on shellies/shelly1pmg4-abc123/status:
+{"power":185.4,"current":0.8,"voltage":231.2,"temperature":26.1}
+```
 
-- [ ] Historical data export (CSV/Excel)
-- [ ] Email/SMS alerts for device failures
-- [ ] Integration with real Shelly devices
-- [ ] Multi-tenant support
-- [ ] Advanced scheduling and automation
-- [ ] Energy cost calculations with tariff support
+### Device State Inspection
+```bash
+# Check device cache status
+curl http://localhost:3001/api/devices | jq '.[0]'
+
+# Monitor specific device
+curl http://localhost:3001/api/devices/{device-id} | jq '{name, isOn, currentPower, status}'
+```
+
+## 🚨 Troubleshooting
+
+### Common Issues
+
+#### Port Already in Use
+```bash
+# Kill processes on MQTT/API ports
+lsof -ti:1883 | xargs kill -9
+lsof -ti:3001 | xargs kill -9
+```
+
+#### Devices Not Connecting
+1. Check MQTT broker is running (should see "MQTT broker listening" in logs)
+2. Verify no firewall blocking ports 1883/8083
+3. Restart simulation: Stop → Start
+
+#### UI Not Updating
+1. Check browser console for errors
+2. Verify WebSocket connection to port 3001
+3. Try hard refresh (Ctrl+F5)
+
+#### Database Issues
+```bash
+# Reset database
+rm prisma/dev.db
+npm run db:push
+npm run db:seed
+```
+
+### Debug Mode
+For detailed MQTT message logging:
+```bash
+DEBUG=aedes* npm run server:dev
+```
 
 ## 🤝 Contributing
 
-1. Fork the repository
-2. Create feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit changes (`git commit -m 'Add AmazingFeature'`)
-4. Push to branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
+1. Follow the existing code style
+2. Test changes with the demo building setup
+3. Update documentation for new features
+4. Ensure MQTT message compatibility
 
 ## 📄 License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+MIT License - see LICENSE file for details.
 
-## 🙏 Acknowledgments
+## 🙋‍♂️ Support
 
-- [Shelly API Documentation](https://shelly-api-docs.shelly.cloud/)
-- [Aedes MQTT Broker](https://github.com/moscajs/aedes)
-- [Ant Design](https://ant.design/)
-- [React Flow](https://reactflow.dev/)
-
----
-
-**Happy Simulating!** 🏠⚡️
+For issues or questions:
+1. Check the [ARCHITECTURE.md](./ARCHITECTURE.md) documentation
+2. Review the troubleshooting section above
+3. Check console logs for error messages
+4. Create an issue with reproduction steps

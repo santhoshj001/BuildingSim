@@ -55,20 +55,122 @@ io.on('connection', (socket) => {
   })
 })
 
-// Forward MQTT messages to WebSocket clients
+// Device state cache - single source of truth (cleared on restart)
+const deviceStates = new Map()
+deviceStates.clear() // Ensure clean start
+
+// Forward MQTT messages to WebSocket clients and update device state cache
 mqttBroker.aedes.on('publish', (packet) => {
   if (packet.topic.startsWith('shellies/')) {
+    const payload = packet.payload.toString()
+    
+    // Update device state cache from MQTT telemetry
+    if (packet.topic.includes('/status') || packet.topic.includes('/telemetry')) {
+      try {
+        const data = JSON.parse(payload)
+        if (data.id) {
+          const mqttDeviceId = data.id
+          // Find the matching device from the pre-populated cache by deviceId
+          let deviceRecord = null
+          for (const [key, value] of deviceStates.entries()) {
+            if (value.deviceId === mqttDeviceId) {
+              deviceRecord = value
+              break
+            }
+          }
+          
+          if (deviceRecord) {
+            // Update the existing device record with MQTT data
+            deviceStates.set(deviceRecord.id, {
+              ...deviceRecord,
+              isOn: data.relay || data.output || false,
+              currentPower: data.power || 0,
+              current: data.current || 0,
+              voltage: data.voltage || 230,
+              temperature: data.temperature || 25,
+              energyTotal: data.energy || 0,
+              status: data.online ? 'ONLINE' : 'OFFLINE',
+              lastUpdate: new Date()
+            })
+          }
+        }
+      } catch (error) {
+        // Ignore JSON parse errors
+      }
+    }
+    
     io.emit('mqtt_message', {
       topic: packet.topic,
-      payload: packet.payload.toString()
+      payload: payload
     })
   }
 })
 
+// Initialize device states from simulation
+async function initializeDeviceStates() {
+  try {
+    const buildings = await prisma.building.findMany({
+      include: {
+        floors: {
+          include: {
+            rooms: {
+              include: {
+                devices: true
+              }
+            }
+          }
+        }
+      }
+    })
+    
+    // Pre-populate device states with room information
+    buildings.forEach(building => {
+      building.floors.forEach(floor => {
+        floor.rooms.forEach(room => {
+          room.devices.forEach(device => {
+            deviceStates.set(device.id, {
+              id: device.id,
+              deviceId: device.deviceId,
+              name: device.name,
+              isOn: false,
+              currentPower: 0,
+              current: 0,
+              voltage: 230,
+              temperature: 25,
+              energyTotal: 0,
+              status: 'OFFLINE',
+              room: {
+                id: room.id,
+                name: room.name,
+                type: room.type,
+                floor: {
+                  id: floor.id,
+                  name: floor.name,
+                  building: {
+                    id: building.id,
+                    name: building.name
+                  }
+                }
+              }
+            })
+          })
+        })
+      })
+    })
+    
+    console.log(`Initialized ${deviceStates.size} device states from database`)
+  } catch (error) {
+    console.error('Failed to initialize device states:', error)
+  }
+}
+
+// Call initialization
+initializeDeviceStates()
+
 // API Routes
 app.use('/api/buildings', buildingRoutes(prisma, mqttBroker, io))
-app.use('/api/devices', deviceRoutes(prisma, mqttBroker, io))
-app.use('/api/simulation', simulationRoutes(prisma, mqttBroker, io))
+app.use('/api/devices', deviceRoutes(prisma, mqttBroker, io, deviceStates))
+app.use('/api/simulation', simulationRoutes(prisma, mqttBroker, io, deviceStates))
 
 // Health check
 app.get('/api/health', (req, res) => {

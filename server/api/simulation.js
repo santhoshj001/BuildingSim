@@ -1,7 +1,7 @@
 const { Router } = require('express')
 const Shelly1PMSimulator = require('../simulators/shelly1pm.js')
 
-function simulationRoutes(prisma, mqttBroker, io) {
+function simulationRoutes(prisma, mqttBroker, io, deviceStates = new Map()) {
   const router = Router()
   const simulators = new Map()
 
@@ -60,11 +60,14 @@ function simulationRoutes(prisma, mqttBroker, io) {
           await simulator.connect()
           simulators.set(device.id, simulator)
 
-          // Update device status
-          await prisma.device.update({
-            where: { id: device.id },
-            data: { status: 'ONLINE' }
-          })
+          // Update device state cache status
+          const cachedDevice = deviceStates.get(device.id)
+          if (cachedDevice) {
+            deviceStates.set(device.id, {
+              ...cachedDevice,
+              status: 'ONLINE'
+            })
+          }
 
           startedDevices.push({
             deviceId: device.id,
@@ -98,15 +101,17 @@ function simulationRoutes(prisma, mqttBroker, io) {
           simulator.disconnect()
           simulators.delete(deviceId)
           
-          await prisma.device.update({
-            where: { id: deviceId },
-            data: { 
+          // Update device state cache
+          const cachedDevice = deviceStates.get(deviceId)
+          if (cachedDevice) {
+            deviceStates.set(deviceId, {
+              ...cachedDevice,
               status: 'OFFLINE',
               isOn: false,
               currentPower: 0,
               current: 0
-            }
-          })
+            })
+          }
 
           io.emit('simulation_stopped', { deviceId })
           res.json({ success: true, message: 'Device simulation stopped' })
@@ -135,21 +140,19 @@ function simulationRoutes(prisma, mqttBroker, io) {
           }
         }
 
-        await prisma.device.updateMany({
-          where: {
-            room: {
-              floor: {
-                buildingId
-              }
-            }
-          },
-          data: { 
-            status: 'OFFLINE',
-            isOn: false,
-            currentPower: 0,
-            current: 0
+        // Update device state cache for building devices
+        for (const device of devices) {
+          const cachedDevice = deviceStates.get(device.id)
+          if (cachedDevice) {
+            deviceStates.set(device.id, {
+              ...cachedDevice,
+              status: 'OFFLINE',
+              isOn: false,
+              currentPower: 0,
+              current: 0
+            })
           }
-        })
+        }
 
         io.emit('simulation_stopped', { buildingId })
         res.json({ 
@@ -163,14 +166,16 @@ function simulationRoutes(prisma, mqttBroker, io) {
         }
         simulators.clear()
 
-        await prisma.device.updateMany({
-          data: { 
+        // Update all devices in cache to offline
+        for (const [id, cachedDevice] of deviceStates.entries()) {
+          deviceStates.set(id, {
+            ...cachedDevice,
             status: 'OFFLINE',
             isOn: false,
             currentPower: 0,
             current: 0
-          }
-        })
+          })
+        }
 
         io.emit('simulation_stopped', { all: true })
         res.json({ success: true, message: 'All simulations stopped' })
@@ -184,29 +189,16 @@ function simulationRoutes(prisma, mqttBroker, io) {
   router.get('/status', async (req, res) => {
     try {
       const activeSimulators = Array.from(simulators.keys())
-      const devices = await prisma.device.findMany({
-        where: { id: { in: activeSimulators } },
-        include: {
-          room: {
-            include: {
-              floor: {
-                include: {
-                  building: true
-                }
-              }
-            }
-          }
-        }
-      })
+      const devices = activeSimulators.map(id => deviceStates.get(id)).filter(Boolean)
 
       res.json({
         active: simulators.size,
         devices: devices.map(d => ({
           id: d.id,
           name: d.name,
-          room: d.room.name,
-          floor: d.room.floor.name,
-          building: d.room.floor.building.name,
+          room: d.room ? d.room.name : 'Unknown',
+          floor: d.room ? d.room.floor.name : 'Unknown',
+          building: d.room ? d.room.floor.building.name : 'Unknown',
           status: d.status,
           power: d.currentPower,
           isOn: d.isOn
