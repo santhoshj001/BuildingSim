@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AIoT Building Simulator</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f5f5f5;
+            color: #333;
+        }
+        .header {
+            background: #2c3e50;
+            color: white;
+            padding: 1rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .logo { font-size: 1.5rem; font-weight: bold; }
+        .stats {
+            display: flex;
+            gap: 2rem;
+            font-size: 0.9rem;
+        }
+        .stat { text-align: center; }
+        .stat-value { font-size: 1.5rem; font-weight: bold; color: #3498db; }
+        .container { max-width: 1200px; margin: 2rem auto; padding: 0 1rem; }
+        .controls {
+            background: white;
+            padding: 1.5rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 2rem;
+        }
+        .btn {
+            background: #3498db;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            margin-right: 10px;
+            transition: background 0.3s;
+        }
+        .btn:hover { background: #2980b9; }
+        .btn.danger { background: #e74c3c; }
+        .btn.danger:hover { background: #c0392b; }
+        .btn.success { background: #27ae60; }
+        .btn.success:hover { background: #229954; }
+        .status { 
+            padding: 0.5rem 1rem; 
+            border-radius: 20px; 
+            font-size: 0.8rem; 
+            font-weight: bold;
+        }
+        .status.online { background: #d5f4e6; color: #27ae60; }
+        .status.offline { background: #fadbd8; color: #e74c3c; }
+        .devices-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1.5rem;
+        }
+        .device-card {
+            background: white;
+            border-radius: 8px;
+            padding: 1.5rem;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            border-left: 4px solid #3498db;
+        }
+        .device-card.on { border-left-color: #27ae60; }
+        .device-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+        .device-name { font-weight: bold; font-size: 1.1rem; }
+        .device-info {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.5rem;
+            font-size: 0.9rem;
+            color: #666;
+            margin-bottom: 1rem;
+        }
+        .device-controls {
+            display: flex;
+            gap: 0.5rem;
+        }
+        .power-indicator {
+            font-size: 1.2rem;
+            font-weight: bold;
+            color: #3498db;
+        }
+        .power-indicator.on { color: #f39c12; }
+        .room-type {
+            background: #ecf0f1;
+            padding: 0.3rem 0.8rem;
+            border-radius: 15px;
+            font-size: 0.8rem;
+            color: #7f8c8d;
+        }
+        .loading {
+            text-align: center;
+            padding: 2rem;
+            color: #7f8c8d;
+        }
+        .error {
+            background: #fadbd8;
+            color: #e74c3c;
+            padding: 1rem;
+            border-radius: 5px;
+            margin-bottom: 1rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="logo">🏠 AIoT Building Simulator</div>
+        <div class="stats">
+            <div class="stat">
+                <div class="stat-value" id="onlineCount">0</div>
+                <div>Online</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value" id="totalPower">0W</div>
+                <div>Total Power</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value" id="activeCount">0</div>
+                <div>Active</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="controls">
+            <h2>Building Controls</h2>
+            <div style="margin-top: 1rem;">
+                <button class="btn success" onclick="startSimulation()">▶️ Start Simulation</button>
+                <button class="btn danger" onclick="stopSimulation()">⏹️ Stop Simulation</button>
+                <button class="btn" onclick="refreshDevices()">🔄 Refresh</button>
+                <button class="btn" onclick="allOn()">💡 All On</button>
+                <button class="btn" onclick="allOff()">💡 All Off</button>
+            </div>
+        </div>
+
+        <div id="error" class="error" style="display: none;"></div>
+        
+        <div id="loading" class="loading">Loading devices...</div>
+        
+        <div id="devicesContainer" class="devices-grid" style="display: none;"></div>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:3001/api';
+        let devices = [];
+        let buildings = [];
+
+        async function fetchAPI(endpoint, options = {}) {
+            try {
+                const response = await fetch(`${API_URL}${endpoint}`, options);
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                return await response.json();
+            } catch (error) {
+                console.error('API Error:', error);
+                showError(`Failed to ${options.method || 'GET'} ${endpoint}: ${error.message}`);
+                throw error;
+            }
+        }
+
+        function showError(message) {
+            const errorDiv = document.getElementById('error');
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+            setTimeout(() => errorDiv.style.display = 'none', 5000);
+        }
+
+        async function loadBuildings() {
+            try {
+                buildings = await fetchAPI('/buildings');
+            } catch (error) {
+                console.error('Failed to load buildings:', error);
+            }
+        }
+
+        async function loadDevices() {
+            try {
+                devices = await fetchAPI('/devices');
+                updateStats();
+                renderDevices();
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('devicesContainer').style.display = 'grid';
+            } catch (error) {
+                document.getElementById('loading').textContent = 'Failed to load devices';
+            }
+        }
+
+        function updateStats() {
+            const onlineDevices = devices.filter(d => d.status === 'ONLINE');
+            const activeDevices = devices.filter(d => d.isOn);
+            const totalPower = devices.reduce((sum, d) => sum + (d.currentPower || 0), 0);
+
+            document.getElementById('onlineCount').textContent = onlineDevices.length;
+            document.getElementById('activeCount').textContent = activeDevices.length;
+            document.getElementById('totalPower').textContent = totalPower.toFixed(1) + 'W';
+        }
+
+        function renderDevices() {
+            const container = document.getElementById('devicesContainer');
+            container.innerHTML = '';
+
+            devices.forEach(device => {
+                const card = document.createElement('div');
+                card.className = `device-card ${device.isOn ? 'on' : ''}`;
+                
+                const roomInfo = device.room ? `${device.room.floor?.building?.name || 'Building'} - ${device.room.floor?.name || 'Floor'} - ${device.room.name}` : 'Unknown Room';
+                const roomType = device.room?.type || 'unknown';
+
+                card.innerHTML = `
+                    <div class="device-header">
+                        <div class="device-name">${device.name}</div>
+                        <div class="status ${device.status.toLowerCase()}">${device.status}</div>
+                    </div>
+                    <div style="margin-bottom: 1rem;">
+                        <div style="font-size: 0.9rem; color: #666; margin-bottom: 0.5rem;">${roomInfo}</div>
+                        <div class="room-type">${roomType}</div>
+                    </div>
+                    <div class="device-info">
+                        <div>Power: <span class="power-indicator ${device.isOn ? 'on' : ''}">${(device.currentPower || 0).toFixed(1)}W</span></div>
+                        <div>Voltage: ${(device.voltage || 0).toFixed(0)}V</div>
+                        <div>Current: ${(device.current || 0).toFixed(2)}A</div>
+                        <div>Temp: ${(device.temperature || 0).toFixed(1)}°C</div>
+                        <div>Energy: ${(device.energyTotal || 0).toFixed(2)}kWh</div>
+                        <div>State: ${device.isOn ? '🟢 ON' : '🔴 OFF'}</div>
+                    </div>
+                    <div class="device-controls">
+                        <button class="btn ${device.isOn ? '' : 'success'}" 
+                                onclick="toggleDevice('${device.id}', '${device.isOn ? 'off' : 'on'}')"
+                                ${device.status !== 'ONLINE' ? 'disabled' : ''}>
+                            ${device.isOn ? '🔴 Turn OFF' : '🟢 Turn ON'}
+                        </button>
+                        <button class="btn" onclick="toggleDevice('${device.id}', 'toggle')" 
+                                ${device.status !== 'ONLINE' ? 'disabled' : ''}>
+                            🔄 Toggle
+                        </button>
+                    </div>
+                `;
+                
+                container.appendChild(card);
+            });
+        }
+
+        async function toggleDevice(deviceId, command) {
+            try {
+                await fetchAPI(`/devices/${deviceId}/control`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ command })
+                });
+                
+                setTimeout(loadDevices, 500); // Refresh after short delay
+            } catch (error) {
+                console.error('Failed to control device:', error);
+            }
+        }
+
+        async function startSimulation() {
+            if (buildings.length === 0) {
+                showError('No buildings found. Please check the backend.');
+                return;
+            }
+            
+            try {
+                const result = await fetchAPI('/simulation/start', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ buildingId: buildings[0].id })
+                });
+                
+                showError(`✅ Started simulation for ${result.devices?.length || 0} devices`);
+                setTimeout(loadDevices, 2000);
+            } catch (error) {
+                console.error('Failed to start simulation:', error);
+            }
+        }
+
+        async function stopSimulation() {
+            try {
+                await fetchAPI('/simulation/stop', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({})
+                });
+                
+                showError('⏹️ Simulation stopped');
+                setTimeout(loadDevices, 1000);
+            } catch (error) {
+                console.error('Failed to stop simulation:', error);
+            }
+        }
+
+        async function allOn() {
+            const onlineDevices = devices.filter(d => d.status === 'ONLINE').map(d => d.id);
+            if (onlineDevices.length === 0) {
+                showError('No online devices to control');
+                return;
+            }
+            
+            try {
+                await fetchAPI('/devices/batch/control', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ deviceIds: onlineDevices, command: 'on' })
+                });
+                
+                showError(`💡 Turned ON ${onlineDevices.length} devices`);
+                setTimeout(loadDevices, 1000);
+            } catch (error) {
+                console.error('Failed to turn on devices:', error);
+            }
+        }
+
+        async function allOff() {
+            const onlineDevices = devices.filter(d => d.status === 'ONLINE').map(d => d.id);
+            if (onlineDevices.length === 0) {
+                showError('No online devices to control');
+                return;
+            }
+            
+            try {
+                await fetchAPI('/devices/batch/control', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ deviceIds: onlineDevices, command: 'off' })
+                });
+                
+                showError(`💡 Turned OFF ${onlineDevices.length} devices`);
+                setTimeout(loadDevices, 1000);
+            } catch (error) {
+                console.error('Failed to turn off devices:', error);
+            }
+        }
+
+        function refreshDevices() {
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('devicesContainer').style.display = 'none';
+            loadDevices();
+        }
+
+        // Initialize the application
+        async function init() {
+            await loadBuildings();
+            await loadDevices();
+            
+            // Auto-refresh every 10 seconds
+            setInterval(loadDevices, 10000);
+        }
+
+        // Start the app
+        init();
+    </script>
+</body>
+</html>

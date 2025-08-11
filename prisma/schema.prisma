@@ -1,0 +1,78 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Building {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  address     String?
+  floors      Floor[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Floor {
+  id         String   @id @default(uuid())
+  buildingId String
+  building   Building @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+  floorNumber Int
+  name       String
+  rooms      Room[]
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([buildingId, floorNumber])
+}
+
+model Room {
+  id        String   @id @default(uuid())
+  floorId   String
+  floor     Floor    @relation(fields: [floorId], references: [id], onDelete: Cascade)
+  roomNumber String
+  name      String
+  type      String   // e.g., "bedroom", "bathroom", "kitchen", "common"
+  devices   Device[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([floorId, roomNumber])
+}
+
+model Device {
+  id           String        @id @default(uuid())
+  roomId       String
+  room         Room          @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  deviceId     String        @unique // Shelly device ID
+  name         String
+  type         String        @default("shelly1pmgen4")
+  mqttTopic    String
+  status       String        @default("OFFLINE") // "ONLINE", "OFFLINE", "ERROR"
+  isOn         Boolean       @default(false)
+  currentPower Float         @default(0) // Current power in Watts
+  voltage      Float         @default(230) // Voltage in V
+  current      Float         @default(0) // Current in A
+  temperature  Float         @default(25) // Temperature in °C
+  energyTotal  Float         @default(0) // Total energy in kWh
+  usageData    UsageData[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+}
+
+model UsageData {
+  id        String   @id @default(uuid())
+  deviceId  String
+  device    Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  timestamp DateTime @default(now())
+  power     Float    // Power in Watts
+  energy    Float    // Energy in Wh
+  voltage   Float
+  current   Float
+  temperature Float
+}
+
